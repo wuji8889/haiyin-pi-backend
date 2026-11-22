@@ -1,0 +1,1 @@
+{"dependencies":{"express":"^4.19.2"},"description":"Haiyin Pi shop backend: Pi payment server approval and completion","engines":{"node":">=18"},"main":"server.js","name":"haiyin-pi-backend","scripts":{"start":"node server.js"},"version":"1.0.0"}
