@@ -1,8 +1,10 @@
 // 海音保健 Pi 商店后端 —— Pi 支付 Server Approval / Server Completion
-// 只做两件事：
+// 只做三件事：
 //   POST /api/approve   { paymentId }              -> 调 Pi API 批准这笔付款
 //   POST /api/complete  { paymentId, txid }        -> 调 Pi API 完成这笔付款
 //   GET  /api/payment/:paymentId                   -> 查一笔付款的状态（调试用）
+//   POST /api/message   { name, contact, message } -> 顾客人工留言，存到后台文件
+//   GET  /api/messages?key=PI_API_KEY             -> 店主看留言（要 key 才给看）
 //   GET  /health                                   -> 健康检查
 //
 // 环境变量：
@@ -11,6 +13,8 @@
 //   PORT         选填，默认 3000（Altare 会注入 $PORT）
 
 const express = require('express')
+const fs = require('fs')
+const path = require('path')
 const app = express()
 
 const API_KEY = process.env.PI_API_KEY || ''
@@ -96,6 +100,62 @@ app.get('/api/payment/:paymentId', async function (req, res) {
     console.error('get payment failed:', err.message)
     res.status(err.status || 500).json({ ok: false, error: err.message })
   }
+})
+
+// ---------- 顾客人工留言 ----------
+// 存哪里：Altare 的 /data 持久目录优先，写不进去就用程序目录
+const MESSAGE_FILES = [process.env.MESSAGE_FILE || '/data/messages.json', './messages.json']
+
+function loadMessages() {
+  for (var i = 0; i < MESSAGE_FILES.length; i++) {
+    try {
+      var raw = fs.readFileSync(MESSAGE_FILES[i], 'utf8')
+      var list = JSON.parse(raw)
+      if (Array.isArray(list)) return list
+    } catch (e) { /* 这个文件没有或读不了，试下一个 */ }
+  }
+  return []
+}
+
+function saveMessages(list) {
+  var text = JSON.stringify(list, null, 2)
+  for (var i = 0; i < MESSAGE_FILES.length; i++) {
+    try {
+      fs.mkdirSync(path.dirname(MESSAGE_FILES[i]), { recursive: true })
+      fs.writeFileSync(MESSAGE_FILES[i], text)
+      return true
+    } catch (e) { /* 写不进去，试下一个 */ }
+  }
+  console.error('save messages failed: no writable file')
+  return false
+}
+
+// 顾客留言：前端人工客服窗口调这里，存到后台文件里
+app.post('/api/message', function (req, res) {
+  var body = req.body || {}
+  var message = (body.message || '').trim()
+  var contact = (body.contact || '').trim()
+  var name = (body.name || '').trim()
+  if (!message) return res.status(400).json({ ok: false, error: '留言内容不能为空' })
+  if (!contact) return res.status(400).json({ ok: false, error: '请留下联系方式，店主好回复你' })
+  if (message.length > 1000) return res.status(400).json({ ok: false, error: '留言太长了，请精简一点' })
+  var list = loadMessages()
+  list.unshift({
+    id: Date.now(),
+    time: new Date().toISOString(),
+    name: name,
+    contact: contact,
+    message: message
+  })
+  if (list.length > 200) list = list.slice(0, 200)
+  if (!saveMessages(list)) return res.status(500).json({ ok: false, error: '留言没存上，请稍后再试' })
+  res.json({ ok: true })
+})
+
+// 店主看留言：?key= 后端 PI_API_KEY 才给看（顾客联系方式不公开）
+app.get('/api/messages', function (req, res) {
+  if (!API_KEY || req.query.key !== API_KEY) return res.status(403).json({ ok: false, error: '没有权限' })
+  res.json({ ok: true, messages: loadMessages() })
 })
 
 app.listen(PORT, function () {
