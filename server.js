@@ -9,7 +9,10 @@
 //
 // 环境变量：
 //   PI_API_KEY   必填，Pi 开发者后台的 API Key（不要写进代码、不要提交到仓库）
-//   PI_API_BASE  选填，默认 https://api.testnet.minepi.com（测试网）；主网用 https://api.minepi.com
+//   PI_API_BASE  选填，默认 https://api.minepi.com —— Platform API 只有一个入口，
+//   测试网和主网的付款都在这一个接口上查（按付款本身的 network 区分）；
+//   api.testnet.minepi.com 是 Stellar 测试网 Horizon，不是 Platform API，
+//   用它查 /v2/payments 永远 404（2026-11-23 全天付款批不了就是这个原因）。
 //   PORT         选填，默认 3000（Altare 会注入 $PORT）
 
 const express = require('express')
@@ -18,7 +21,7 @@ const path = require('path')
 const app = express()
 
 const API_KEY = process.env.PI_API_KEY || ''
-const API_BASE = (process.env.PI_API_BASE || 'https://api.testnet.minepi.com').replace(/\/$/, '')
+const API_BASE = (process.env.PI_API_BASE || 'https://api.minepi.com').replace(/\/$/, '')
 const PORT = parseInt(process.env.PORT || '3000', 10)
 
 app.use(express.json())
